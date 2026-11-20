@@ -155,4 +155,3 @@ export function searchMask(groups: FieldGroup[]): Mask {
 
 /** Arabic pass only needs the localized name; everything else comes from the English pass. */
 export const DETAILS_FIELD_MASK_AR = 'id,displayName'
-export const DETAILS_AR_TIER: Tier = 'pro'
