@@ -1,7 +1,7 @@
 import { ApiError, normalizePlace, photoUri, placeDetails, reverseGeocode, textSearch } from './api'
 import { config } from './config'
 import { clearFailure, getAllPlaces, getPlace, putPlace, recordFailure, upsertPlace } from './db'
-import { DETAILS_FIELD_MASK_AR, MASK_VERSION, detailsMask, searchMask } from './masks'
+import { DETAILS_FIELD_MASK_AR, FIELD_GROUPS, MASK_VERSION, detailsMask, searchMask, type FieldGroup } from './masks'
 import type { Sku } from './pricing'
 import type { GeoResult, Lang, LogLevel, Place, PlaceUpdate } from './types'
 
@@ -74,7 +74,10 @@ function geoUpdate(id: string, geo: GeoResult | null): PlaceUpdate {
 }
 
 async function fetchDetails(opts: RunOptions, cb: RunCallbacks, place: Place, lang: Lang) {
-  const mask = lang === 'ar' ? DETAILS_FIELD_MASK_AR : detailsMask(opts.photosMeta)
+  const groups: FieldGroup[] = opts.photosMeta
+    ? FIELD_GROUPS
+    : FIELD_GROUPS.filter((group) => group !== 'photos')
+  const mask = lang === 'ar' ? DETAILS_FIELD_MASK_AR : detailsMask(groups).mask
   const raw = await withRateLimitRetry(
     () => placeDetails(opts.apiKey, place.id, lang, mask),
     DETAILS_RATE_LIMIT_SLEEP_MS,
@@ -112,7 +115,10 @@ async function fetchPhotoUri(opts: RunOptions, cb: RunCallbacks, place: Place) {
 /* ---------- Phase 1: Text Search ---------- */
 async function phaseSearch(opts: RunOptions, cb: RunCallbacks) {
   const found = new Set<string>()
-  const mask = searchMask(opts.photosMeta)
+  const groups: FieldGroup[] = opts.photosMeta
+    ? FIELD_GROUPS
+    : FIELD_GROUPS.filter((group) => group !== 'photos')
+  const mask = searchMask(groups).mask
 
   for (let i = 0; i < opts.areas.length; i++) {
     const area = opts.areas[i]
