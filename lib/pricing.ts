@@ -1,4 +1,5 @@
-const { config } = require('./config')
+import { config } from './config'
+
 const rate = config.qarPerUsd
 if (!Number.isFinite(rate) || rate <= 0) {
   throw new Error('rate must be a finite number greater than 0')
@@ -35,29 +36,46 @@ export const DETAILS_PRICE: Record<Tier, number> = {
 export const PHOTO_PRICE = 7
 export const GEOCODING_PRICE = 5
 
-export type Sku = 'TEXT_SEARCH' | 'DETAILS' | 'PLACE_PHOTO' | 'GEOCODING'
+export type Sku = 'TEXT_SEARCH_PRO' | 'DETAILS_ENTERPRISE_ATMOSPHERE' | 'PLACE_PHOTO' | 'GEOCODING'
 
-export const SKUS: Sku[] = ['TEXT_SEARCH', 'DETAILS', 'PLACE_PHOTO', 'GEOCODING']
+export const SKUS: Sku[] = ['TEXT_SEARCH_PRO', 'DETAILS_ENTERPRISE_ATMOSPHERE', 'PLACE_PHOTO', 'GEOCODING']
 
 export const SKU_LABELS: Record<Sku, string> = {
-  TEXT_SEARCH: 'Text Search',
-  DETAILS: 'Details',
+  TEXT_SEARCH_PRO: 'Text Search (Pro)',
+  DETAILS_ENTERPRISE_ATMOSPHERE: 'Details (Enterprise + Atmosphere)',
   PLACE_PHOTO: 'Photos',
   GEOCODING: 'Geocoding',
 }
 
+export const PRICES: Record<Sku, number> = {
+  TEXT_SEARCH_PRO: TEXT_SEARCH_PRICE.pro,
+  DETAILS_ENTERPRISE_ATMOSPHERE: DETAILS_PRICE.atmosphere,
+  PLACE_PHOTO: PHOTO_PRICE,
+  GEOCODING: GEOCODING_PRICE,
+}
+
+export type SkuCounts = Record<Sku, number>
 export type Usage = Record<Sku, { count: number; usd: number }>
 
+export const emptySkuCounts = (): SkuCounts =>
+  Object.fromEntries(SKUS.map((sku) => [sku, 0])) as SkuCounts
+
 export const emptyUsage = (): Usage =>
-  Object.fromEntries(SKUS.map((s) => [s, { count: 0, usd: 0 }])) as Usage
+  Object.fromEntries(SKUS.map((sku) => [sku, { count: 0, usd: 0 }])) as Usage
 
 export const perCall = (pricePer1k: number) => {
   if (!Number.isFinite(pricePer1k) || pricePer1k < 0) throw new Error('pricePer1k invalid')
   return pricePer1k / 1000
 }
 
+export const skuCost = (sku: Sku, count: number) => perCall(PRICES[sku]) * count
+
+export function calcCost(counts: SkuCounts) {
+  return Math.round(SKUS.reduce((sum, sku) => sum + skuCost(sku, counts[sku]), 0) * 1e6) / 1e6
+}
+
 export function totalUsd(usage: Usage) {
-  return Math.round(SKUS.reduce((sum, s) => sum + usage[s].usd, 0) * 1e6) / 1e6
+  return Math.round(SKUS.reduce((sum, sku) => sum + usage[sku].usd, 0) * 1e6) / 1e6
 }
 
 const skuCheck = new Set<Sku>(SKUS)
