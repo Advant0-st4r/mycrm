@@ -1,5 +1,8 @@
 export type Lang = 'en' | 'ar'
 
+export const DELIVERY_PLATFORMS = ['Talabat', 'Snoonu', 'Rafeek', 'Ninja', 'Keeta'] as const
+export const DISCOUNT_PLATFORMS = ['Urban Point', 'MyBook', 'Entertainer'] as const
+
 export interface PlacePhoto {
   name: string
   widthPx: number
@@ -42,6 +45,8 @@ export interface Place {
   price_range?: string
   rating?: number
   user_rating_count?: number
+  delivery_platforms?: string[]
+  discount_platforms?: string[]
   hours?: string[]
   hours_json?: string
   outdoor_seating?: boolean | null
