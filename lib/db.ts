@@ -68,6 +68,23 @@ export async function upsertPlace(incoming: PlaceUpdate, preferExisting = false)
   return merged
 }
 
+export async function updatePlaceFields(id: string, fields: Omit<Partial<Place>, 'id'>) {
+  const db = await getDb()
+  const tx = db.transaction('places', 'readwrite')
+  const existing = await tx.store.get(id)
+  if (!existing) {
+    await tx.done
+    return
+  }
+
+  const updated = { ...existing, ...fields, id, updated_at: new Date().toISOString() }
+  const { score, incomplete } = computeCompleteness(updated)
+  updated._completeness = score
+  updated._incomplete = incomplete
+  await tx.store.put(updated)
+  await tx.done
+}
+
 export async function clearPlaces() {
   await (await getDb()).clear('places')
 }

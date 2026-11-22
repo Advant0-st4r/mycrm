@@ -6,7 +6,7 @@ export const CSV_COLUMNS = [
   'formatted_address', 'adr_format', '_geo_building', '_geo_street', '_geo_zone', '_geo_area',
   '_geo_formatted', '_geo_source', '_geo_enriched_at', 'lat', 'lng', 'phone', 'phone_intl',
   'website', 'google_maps_url', 'price_level', 'price_band', 'price_range', 'rating',
-  'user_rating_count', 'outdoor_seating', 'takeout', 'delivery', 'dine_in', 'curbside_pickup',
+  'user_rating_count', 'delivery_platforms', 'discount_platforms', 'outdoor_seating', 'takeout', 'delivery', 'dine_in', 'curbside_pickup',
   'allows_dogs', 'good_for_children', 'good_for_groups', 'good_for_watching_sports',
   'menu_for_children', 'restroom', 'serves_beer', 'serves_cocktails', 'serves_coffee',
   'serves_dessert', 'serves_vegetarian', 'serves_wine', 'parking', 'payment', 'accessibility',
