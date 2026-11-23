@@ -5,8 +5,20 @@ import { runCollection, runRetry, sleep, type RunCallbacks, type RunOptions } fr
 import { clearPlaces } from '@/lib/db'
 import { emptySkuCounts, type Sku, type SkuCounts } from '@/lib/pricing'
 import type { LogEntry, LogLevel } from '@/lib/types'
+import type { PlatformResultSnapshot } from '@/lib/platform-availability'
 
 const MAX_LOGS = 500
+const ATTEMPTS_KEY = 'delivery-platform-saved-attempts'
+export type AttemptStatus = 'Waiting for confirmation' | 'Running' | 'Paused' | 'Updated' | 'Canceled' | 'Ready to download'
+export interface SavedAttempt {
+  attempt: number
+  status: AttemptStatus
+  savedAt: string
+  found: number
+  errors: number
+  areas: number
+  platformRows?: PlatformResultSnapshot[]
+}
 
 export function useCollector(onDataChanged: () => void) {
   const [running, setRunning] = useState(false)
@@ -16,92 +28,120 @@ export function useCollector(onDataChanged: () => void) {
   const [sku, setSku] = useState<SkuCounts>(emptySkuCounts)
   const [found, setFound] = useState(0)
   const [errors, setErrors] = useState(0)
-
+  const [attempts, setAttempts] = useState<SavedAttempt[]>([])
   const pausedRef = useRef(false)
+  const canceledRef = useRef(false)
   const logId = useRef(0)
+  const activeOptionsRef = useRef<RunOptions | null>(null)
+  const foundRef = useRef(found)
+  const errorsRef = useRef(errors)
+  foundRef.current = found
+  errorsRef.current = errors
+
+  const appendAttempt = useCallback((status: AttemptStatus, areaCount = activeOptionsRef.current?.areas.length ?? 0, platformRows?: PlatformResultSnapshot[]) => {
+    setAttempts((previous) => {
+      const nextAttempt = [...previous, {
+        attempt: previous.length + 1,
+        status,
+        savedAt: new Date().toISOString(),
+        found: foundRef.current,
+        errors: errorsRef.current,
+        areas: areaCount,
+        ...(platformRows ? { platformRows } : {}),
+      }]
+      try { localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(nextAttempt)) } catch { /* Storage may be unavailable. */ }
+      return nextAttempt
+    })
+  }, [found, errors])
+
+  const loadAttempts = useCallback(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(ATTEMPTS_KEY) || '[]')
+      if (Array.isArray(saved)) setAttempts(saved)
+    } catch { setAttempts([]) }
+  }, [])
+
+  const clearAttempts = useCallback(() => {
+    try { localStorage.removeItem(ATTEMPTS_KEY) } catch { /* Storage may be unavailable. */ }
+    setAttempts([])
+  }, [])
 
   const log = useCallback((msg: string, level: LogLevel = 'info') => {
-    const entry: LogEntry = {
-      id: ++logId.current,
-      ts: new Date().toLocaleTimeString(),
-      level,
-      msg,
-    }
+    const entry: LogEntry = { id: ++logId.current, ts: new Date().toLocaleTimeString(), level, msg }
     setLogs((prev) => {
       const next = [...prev, entry]
       return next.length > MAX_LOGS ? next.slice(-MAX_LOGS) : next
     })
   }, [])
 
-  const callbacks = useCallback(
-    (): RunCallbacks => ({
-      log,
-      progress: (pct, text) => setProgress({ pct: Math.min(100, Math.max(0, pct)), text }),
-      sku: (s: Sku) => setSku((prev) => ({ ...prev, [s]: prev[s] + 1 })),
-      error: () => setErrors((n) => n + 1),
-      found: setFound,
-      checkpoint: async () => {
-        while (pausedRef.current) await sleep(250)
-      },
-      dataChanged: onDataChanged,
-    }),
-    [log, onDataChanged],
-  )
+  const callbacks = useCallback((): RunCallbacks => ({
+    log,
+    progress: (pct, text) => setProgress({ pct: Math.min(100, Math.max(0, pct)), text }),
+    sku: (s: Sku) => setSku((prev) => ({ ...prev, [s]: prev[s] + 1 })),
+    error: () => setErrors((n) => n + 1),
+    found: setFound,
+    checkpoint: async () => {
+      while (pausedRef.current && !canceledRef.current) await sleep(250)
+      if (canceledRef.current) throw new Error('Run canceled')
+    },
+    dataChanged: onDataChanged,
+  }), [log, onDataChanged])
 
-  const execute = useCallback(
-    async (task: (cb: RunCallbacks) => Promise<void>) => {
-      if (running) return
-      setRunning(true)
+  const execute = useCallback(async (task: (cb: RunCallbacks) => Promise<void>) => {
+    if (running) return
+    setRunning(true)
+    pausedRef.current = false
+    canceledRef.current = false
+    setPaused(false)
+    appendAttempt('Running')
+    try {
+      await task(callbacks())
+      if (!canceledRef.current) appendAttempt('Ready to download')
+    } catch (e) {
+      if (!canceledRef.current) log(`Run stopped: ${e instanceof Error ? e.message : String(e)}`, 'err')
+    } finally {
+      setRunning(false)
       pausedRef.current = false
       setPaused(false)
-      try {
-        await task(callbacks())
-      } catch (e) {
-        log(`Run aborted: ${e instanceof Error ? e.message : String(e)}`, 'err')
-      } finally {
-        setRunning(false)
-        pausedRef.current = false
-        setPaused(false)
-        onDataChanged()
-      }
-    },
-    [running, callbacks, log, onDataChanged],
-  )
+      activeOptionsRef.current = null
+      onDataChanged()
+    }
+  }, [running, callbacks, log, onDataChanged, appendAttempt])
 
-  const start = useCallback(
-    (opts: RunOptions) => {
-      if (!opts.apiKey) {
-        log('No API key set — save one in Step 2 first', 'err')
-        return
-      }
-      if (!opts.areas.length) {
-        log('Add at least one area', 'err')
-        return
-      }
-      setFound(0)
-      setErrors(0)
-      log(`Starting collection across ${opts.areas.length} areas`, 'info')
-      void execute((cb) => runCollection(opts, cb))
-    },
-    [execute, log],
-  )
+  const requestStart = useCallback((opts: RunOptions, mode: 'collect' | 'retry' = 'collect') => {
+    if (!opts.apiKey || (mode === 'collect' && !opts.areas.length)) return
+    activeOptionsRef.current = opts
+    appendAttempt('Waiting for confirmation', opts.areas.length)
+    return mode
+  }, [appendAttempt])
 
-  const retry = useCallback(
-    (opts: RunOptions) => {
-      if (!opts.apiKey) {
-        log('No API key set — save one in Step 2 first', 'err')
-        return
-      }
-      void execute((cb) => runRetry(opts, cb))
-    },
-    [execute, log],
-  )
+  const confirmStart = useCallback((opts: RunOptions, mode: 'collect' | 'retry' = 'collect') => {
+    activeOptionsRef.current = opts
+    setFound(0)
+    setErrors(0)
+    void execute((cb) => mode === 'retry' ? runRetry(opts, cb) : runCollection(opts, cb))
+  }, [execute])
+
+  const updateAndResume = useCallback((opts: RunOptions) => {
+    if (activeOptionsRef.current) Object.assign(activeOptionsRef.current, opts)
+    appendAttempt('Updated', opts.areas.length)
+    pausedRef.current = false
+    setPaused(false)
+    appendAttempt('Running', opts.areas.length)
+  }, [appendAttempt])
 
   const togglePause = useCallback(() => {
     pausedRef.current = !pausedRef.current
     setPaused(pausedRef.current)
-    log(pausedRef.current ? 'Paused' : 'Resumed', 'warn')
-  }, [log])
+    appendAttempt(pausedRef.current ? 'Paused' : 'Running')
+  }, [appendAttempt])
+
+  const cancel = useCallback(() => {
+    canceledRef.current = true
+    pausedRef.current = false
+    setPaused(false)
+    appendAttempt('Canceled')
+  }, [appendAttempt])
 
   const reset = useCallback(async () => {
     await clearPlaces()
@@ -109,9 +149,9 @@ export function useCollector(onDataChanged: () => void) {
     setFound(0)
     setErrors(0)
     setProgress({ pct: 0, text: 'Idle' })
-    log('Database reset', 'warn')
+    log('Stored places cleared', 'warn')
     onDataChanged()
   }, [log, onDataChanged])
 
-  return { running, paused, progress, logs, sku, found, errors, start, retry, togglePause, reset, log }
+  return { running, paused, progress, logs, sku, found, errors, attempts, loadAttempts, clearAttempts, appendAttempt, requestStart, confirmStart, updateAndResume, togglePause, cancel, reset, log }
 }

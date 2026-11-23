@@ -1,6 +1,12 @@
 export type Lang = 'en' | 'ar'
 
+export type DeliveryCountry = 'QA' | 'SA'
+
 export const DELIVERY_PLATFORMS = ['Talabat', 'Snoonu', 'Rafeek', 'Ninja', 'Keeta'] as const
+export const DELIVERY_PLATFORMS_BY_COUNTRY = {
+  QA: ['Talabat', 'Snoonu', 'Rafeek', 'Keeta'],
+  SA: ['Talabat', 'Ninja'],
+} as const
 export const DISCOUNT_PLATFORMS = ['Urban Point', 'MyBook', 'Entertainer'] as const
 
 export interface PlacePhoto {
@@ -47,6 +53,14 @@ export interface Place {
   user_rating_count?: number
   delivery_platforms?: string[]
   discount_platforms?: string[]
+  talabat_listed?: boolean
+  talabat_rating?: number
+  talabat_offers?: string[]
+  talabat_delivery_fee?: string | number
+  talabat_min_order?: string | number
+  talabat_source_url?: string
+  source?: string
+  source_url?: string
   hours?: string[]
   hours_json?: string
   outdoor_seating?: boolean | null

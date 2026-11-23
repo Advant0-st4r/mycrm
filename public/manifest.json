@@ -1,0 +1,11 @@
+{
+  "name": "Krave Qatar Restaurant Data Collector",
+  "short_name": "Krave Qatar",
+  "description": "Collect and review Qatar restaurant data and delivery platform availability.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "lang": "en",
+  "dir": "ltr"
+}
