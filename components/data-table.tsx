@@ -12,7 +12,7 @@ import {
   normalizeRestaurantName,
   readPlatformFlags,
   selectedPlatformNames,
-  stripJsonFences,
+  parsePlatformResponse,
   type PlatformResultSnapshot,
   type VerificationRow,
 } from '@/lib/platform-availability'
@@ -66,33 +66,41 @@ export function DataTable({
 
   async function applyResponse() {
     setAvailabilityMessage('')
-    let response: unknown
+    let response: unknown[]
     try {
-      response = JSON.parse(stripJsonFences(aiResponse))
+      response = parsePlatformResponse(aiResponse)
     } catch {
       setMissingRows(filtered)
-      setAvailabilityMessage('That response is not valid JSON. Check it and try again.')
-      return
-    }
-
-    if (!Array.isArray(response)) {
-      setMissingRows(filtered)
-      setAvailabilityMessage('The response needs to be a list of restaurant results.')
+      setAvailabilityMessage('I couldn’t find a restaurant results list in that text, so nothing was changed. Paste the full reply or copy a fresh prompt and try again.')
       return
     }
 
     const usedIndices = new Set<number>()
     const updates: Array<{ place: Place; snapshot: PlatformResultSnapshot; delivery: string[]; discounts: string[] }> = []
+    let inferredPlatforms = 0
+    let readableRows = 0
 
-    for (const item of response) {
+    for (const [responseIndex, item] of response.entries()) {
       if (!item || typeof item !== 'object') continue
       const record = item as Record<string, unknown>
       const flags = readPlatformFlags(record)
-      if (!flags || typeof record.restaurantName !== 'string' || !record.restaurantName.trim()) continue
-      const name = record.restaurantName
-      let index = Number.isInteger(record.rowIndex) && Number(record.rowIndex) >= 0 && Number(record.rowIndex) < filtered.length
-        ? Number(record.rowIndex)
-        : -1
+      if (!flags) continue
+      readableRows++
+      inferredPlatforms += flags.missingCount
+
+      const nameValue = [record.restaurantName, record.restaurant_name, record.restaurant, record.name, record.placeName, record.businessName, record.nameEnglish, record.nameArabic, record.name_ar, record.restaurant_name_ar]
+        .find((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+      const name = nameValue?.trim() ?? ''
+      const idValue = [record.placeId, record.place_id, record.googlePlaceId, record.id]
+        .find((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+      let index = idValue ? filtered.findIndex((place) => place.id === idValue) : -1
+      const rowIndexValue = record.rowIndex ?? record.row_index ?? record.index
+      const rowIndex = typeof rowIndexValue === 'number'
+        ? rowIndexValue
+        : typeof rowIndexValue === 'string' && rowIndexValue.trim()
+          ? Number(rowIndexValue)
+          : -1
+      if (index < 0 && Number.isInteger(rowIndex) && rowIndex >= 0 && rowIndex < filtered.length) index = rowIndex
       if (index >= 0 && name) {
         const place = filtered[index]
         const normalized = normalizeRestaurantName(name)
@@ -105,6 +113,9 @@ export function DataTable({
           if (usedIndices.has(rowIndex)) return false
           return [place.name_en, place.name_ar, [place.name_en, place.name_ar].filter(Boolean).join(' | ')].some((value) => value && normalizeRestaurantName(value) === normalized)
         })
+      }
+      if (index < 0 && !name && !idValue && rowIndexValue === undefined && response.length === filtered.length) {
+        index = responseIndex
       }
       if (index < 0 || usedIndices.has(index)) continue
 
@@ -119,27 +130,34 @@ export function DataTable({
           rowIndex: index,
           placeId: place.id,
           restaurantName: name || place.name_en || place.name_ar || place.id,
-          ...flags,
+          deliveryPlatforms: flags.deliveryPlatforms,
+          discountPlatforms: flags.discountPlatforms,
         },
       })
     }
 
     const unfilled = filtered.filter((_, index) => !usedIndices.has(index))
     setMissingRows(unfilled)
+    if (updates.length === 0) {
+      setAvailabilityMessage(readableRows === 0
+        ? 'I found a reply, but couldn’t read any platform details from it, so nothing was changed. Include delivery or discount platform results, or copy a fresh prompt and try again.'
+        : 'I couldn’t match those results to your restaurant list, so nothing was changed. Keep the restaurant names or row numbers in the reply and try again.')
+      return
+    }
+
     setApplying(true)
     try {
       await Promise.all(updates.map(({ place, delivery, discounts }) =>
         updatePlaceFields(place.id, { delivery_platforms: delivery, discount_platforms: discounts }),
       ))
-      if (updates.length) {
-        onPlatformsApplied(updates.map(({ snapshot }) => snapshot))
-        onRefresh()
-      }
+      onPlatformsApplied(updates.map(({ snapshot }) => snapshot))
+      onRefresh()
+      const gapNote = inferredPlatforms ? ' Platforms missing from the reply were marked “not confirmed.”' : ''
       setAvailabilityMessage(unfilled.length
-        ? `${unfilled.length} rows still need platform info. You can copy a prompt for just those rows or edit them below.`
-        : `All ${filtered.length} rows have platform information.`)
+        ? `Applied platform details to ${updates.length} restaurants. ${unfilled.length} remain unmatched; copy a prompt for those rows to finish.${gapNote}`
+        : `Applied platform details to all ${updates.length} restaurants.${gapNote}`)
     } catch {
-      setAvailabilityMessage('Some changes could not be saved. Try applying the response again.')
+      setAvailabilityMessage('Some changes could not be saved. Your restaurant list is unchanged; please try applying the reply again.')
     } finally {
       setApplying(false)
     }
@@ -167,7 +185,7 @@ export function DataTable({
       <section className="flex flex-col gap-3 rounded-xl border border-slate-700/70 bg-slate-900/60 p-4" aria-labelledby="availability-title">
         <div>
           <h3 id="availability-title" className="text-sm font-semibold text-slate-100">Check platform availability</h3>
-          <p className="mt-1 text-xs leading-relaxed text-slate-400">Copy a prompt for the visible rows, ask Gemini to check current Qatar listings, then paste its JSON response here.</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">Copy a prompt, ask Gemini to check current listings, then paste its reply. We match restaurants by name or row number, accept common formats, and treat platforms left out of the reply as not confirmed.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <ActionButton onClick={() => void copyPrompt()} disabled={!filtered.length}>Copy verification prompt</ActionButton>
