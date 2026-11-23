@@ -21,7 +21,8 @@ export default function Page() {
 
   useEffect(() => {
     setApiKey(localStorage.getItem(API_KEY_STORAGE) || config.apiKey)
-  }, [])
+    collector.loadAttempts()
+  }, [collector.loadAttempts])
 
   const saveKey = useCallback((key: string) => {
     localStorage.setItem(API_KEY_STORAGE, key)
@@ -49,15 +50,23 @@ export default function Page() {
       <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 md:py-12">
         <header className="flex flex-col gap-2">
           <h1 className="text-balance text-2xl font-bold tracking-tight md:text-3xl">
-            {config.appName}
+            Restaurant Finder
           </h1>
           <p className="text-pretty text-sm text-slate-400 md:text-base">
-            Maximal accurate Google Places extraction · geocoding-enriched · cost-aware
+            Find restaurants, add helpful details, and keep an eye on estimated costs.
           </p>
         </header>
 
+        <nav aria-label="Setup progress" className="flex flex-wrap gap-2" data-testid="step-indicator">
+          {['Prepare', 'Connect', 'Collect', 'Review'].map((label, index) => (
+            <div key={label} className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300">
+              <span className="flex size-5 items-center justify-center rounded-full bg-sky-500/20 font-semibold text-sky-300">{index + 1}</span>
+              {label}
+            </div>
+          ))}
+        </nav>
         <ApiSetupStep />
-        <ApiKeyStep apiKey={apiKey} onSave={saveKey} onClear={clearKey} />
+        <ApiKeyStep apiKey={apiKey} onSave={saveKey} onClear={clearKey} disabled={collector.running && !collector.paused} />
         <DeliveryPlatforms
           country={deliveryCountry}
           onCountryChange={setDeliveryCountry}

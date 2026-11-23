@@ -9,11 +9,12 @@ interface ApiKeyStepProps {
   apiKey: string
   onSave: (key: string) => void
   onClear: () => void
+  disabled?: boolean
 }
 
 type TestResult = { ok: boolean; text: string } | null
 
-export function ApiKeyStep({ apiKey, onSave, onClear }: ApiKeyStepProps) {
+export function ApiKeyStep({ apiKey, onSave, onClear, disabled = false }: ApiKeyStepProps) {
   const [draft, setDraft] = useState<string | null>(null)
   const [status, setStatus] = useState('')
   const [testing, setTesting] = useState(false)
@@ -48,22 +49,22 @@ export function ApiKeyStep({ apiKey, onSave, onClear }: ApiKeyStepProps) {
       return
     }
     setTesting(true)
-    setStatus('Testing Places API (New) and Geocoding API…')
+          setStatus('Checking your Google Maps connection…')
     setPlaces(null)
     setGeo(null)
 
     try {
       const res = await textSearch(key, 'restaurants in Doha, Qatar', 'places.id,places.displayName')
-      setPlaces({ ok: true, text: `Places (${res.places.length} results)` })
-    } catch (e) {
-      setPlaces({ ok: false, text: `Places (${e instanceof Error ? e.message : 'error'})` })
+      setPlaces({ ok: true, text: `Place search is ready (${res.places.length} results)` })
+    } catch {
+      setPlaces({ ok: false, text: 'Place search could not connect. Check your key and settings.' })
     }
 
     try {
       const res = await reverseGeocode(key, 25.2854, 51.531)
-      setGeo({ ok: true, text: `Geocoding (${res?.formatted ?? 'no street-level result'})` })
-    } catch (e) {
-      setGeo({ ok: false, text: `Geocoding (${e instanceof Error ? e.message : 'error'})` })
+      setGeo({ ok: true, text: res?.formatted ? 'Nearby address lookup is ready.' : 'Address lookup is ready.' })
+    } catch {
+      setGeo({ ok: false, text: 'Address lookup could not connect. Check your key and settings.' })
     }
 
     setTesting(false)
@@ -71,10 +72,10 @@ export function ApiKeyStep({ apiKey, onSave, onClear }: ApiKeyStepProps) {
   }
 
   return (
-    <StepCard step={2} title="Enter your API Key">
+    <StepCard step={2} title="Connect your access key">
       <div className="flex flex-col gap-2">
         <label htmlFor="api-key" className="text-sm font-medium text-slate-300">
-          Google Maps API key
+          Google Maps access key
         </label>
         <input
           id="api-key"
@@ -85,17 +86,18 @@ export function ApiKeyStep({ apiKey, onSave, onClear }: ApiKeyStepProps) {
           onChange={(e) => setDraft(e.target.value)}
           placeholder="AIzaSy…"
           className={`${inputClass} font-mono`}
+          disabled={disabled}
         />
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <ActionButton tone="primary" onClick={save}>
+        <ActionButton tone="primary" onClick={save} disabled={disabled}>
           Save Key
         </ActionButton>
-        <ActionButton tone="success" onClick={test} disabled={testing}>
-          {testing ? 'Testing…' : 'Test Both APIs'}
+        <ActionButton tone="success" onClick={test} disabled={testing || disabled}>
+          {testing ? 'Checking…' : 'Check connection'}
         </ActionButton>
-        <ActionButton tone="danger" onClick={clear}>
+        <ActionButton tone="danger" onClick={clear} disabled={disabled}>
           Clear
         </ActionButton>
       </div>
