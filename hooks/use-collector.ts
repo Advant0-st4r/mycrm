@@ -5,6 +5,7 @@ import { runCollection, runRetry, sleep, type RunCallbacks, type RunOptions } fr
 import { clearPlaces } from '@/lib/db'
 import { emptySkuCounts, type Sku, type SkuCounts } from '@/lib/pricing'
 import type { LogEntry, LogLevel } from '@/lib/types'
+import type { PlatformResultSnapshot } from '@/lib/platform-availability'
 
 const MAX_LOGS = 500
 const ATTEMPTS_KEY = 'delivery-platform-saved-attempts'
@@ -16,6 +17,7 @@ export interface SavedAttempt {
   found: number
   errors: number
   areas: number
+  platformRows?: PlatformResultSnapshot[]
 }
 
 export function useCollector(onDataChanged: () => void) {
@@ -36,7 +38,7 @@ export function useCollector(onDataChanged: () => void) {
   foundRef.current = found
   errorsRef.current = errors
 
-  const appendAttempt = useCallback((status: AttemptStatus, areaCount = activeOptionsRef.current?.areas.length ?? 0) => {
+  const appendAttempt = useCallback((status: AttemptStatus, areaCount = activeOptionsRef.current?.areas.length ?? 0, platformRows?: PlatformResultSnapshot[]) => {
     setAttempts((previous) => {
       const nextAttempt = [...previous, {
         attempt: previous.length + 1,
@@ -45,6 +47,7 @@ export function useCollector(onDataChanged: () => void) {
         found: foundRef.current,
         errors: errorsRef.current,
         areas: areaCount,
+        ...(platformRows ? { platformRows } : {}),
       }]
       try { localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(nextAttempt)) } catch { /* Storage may be unavailable. */ }
       return nextAttempt

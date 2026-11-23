@@ -79,7 +79,12 @@ export default function Page() {
           onClear={clearQueue}
           disabled={collector.running}
         />
-        <DataTable places={places} onRefresh={refresh} deliveryCountry={deliveryCountry} />
+        <DataTable
+          places={places}
+          onRefresh={refresh}
+          deliveryCountry={deliveryCountry}
+          onPlatformsApplied={(rows) => collector.appendAttempt('Updated', rows.length, rows)}
+        />
 
         <footer className="border-t border-slate-800 pt-6 text-xs leading-relaxed text-slate-500">
           Data is retrieved from Google Maps Platform and stored only in this browser (IndexedDB).

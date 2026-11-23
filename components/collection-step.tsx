@@ -72,8 +72,10 @@ export function CollectionStep({ apiKey, places, collector }: CollectionStepProp
     const content = format === 'json'
       ? JSON.stringify(attempts, null, 2)
       : [
-          ['Attempt', 'Status', 'Saved at', 'Places found', 'Errors', 'Areas'],
-          ...attempts.map((item) => [item.attempt, item.status, item.savedAt, item.found, item.errors, item.areas]),
+          ['Attempt', 'Status', 'Saved at', 'Places found', 'Errors', 'Areas', 'Row index', 'Restaurant', 'Talabat', 'Snoonu', 'Rafeek', 'Keeta', 'Urban Point', 'MyBook', 'Entertainer'],
+          ...attempts.flatMap((item) => item.platformRows?.length
+            ? item.platformRows.map((row) => [item.attempt, item.status, item.savedAt, item.found, item.errors, item.areas, row.rowIndex, row.restaurantName, row.deliveryPlatforms.talabat, row.deliveryPlatforms.snoonu, row.deliveryPlatforms.rafeek, row.deliveryPlatforms.keeta, row.discountPlatforms.urban_point, row.discountPlatforms.mybook, row.discountPlatforms.entertainer])
+            : [[item.attempt, item.status, item.savedAt, item.found, item.errors, item.areas, '', '', '', '', '', '', '', '', '']]),
         ].map((row) => row.map(csvCell).join(',')).join('\r\n')
     const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
