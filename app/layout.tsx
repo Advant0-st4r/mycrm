@@ -4,7 +4,8 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Krave Qatar Restaurant Data Collector',
-  description: 'Collect, enrich, and export Qatar restaurant data from Google Places and Geocoding APIs.',
+  description: 'Collect, enrich, and review Qatar restaurant data and delivery platform listings.',
+  manifest: '/manifest.json',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -26,6 +27,9 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
   colorScheme: 'dark',
   themeColor: '#020617',
 }

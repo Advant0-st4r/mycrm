@@ -6,7 +6,7 @@ import { ActionButton, inputClass } from './action-button'
 import { StepCard } from './step-card'
 import { exportCsv, exportJson } from '@/lib/export'
 import { updatePlaceFields } from '@/lib/db'
-import { DELIVERY_PLATFORMS, DISCOUNT_PLATFORMS, type Place } from '@/lib/types'
+import { DELIVERY_PLATFORMS_BY_COUNTRY, DISCOUNT_PLATFORMS, type DeliveryCountry, type Place } from '@/lib/types'
 
 const MAX_ROWS = 500
 
@@ -17,7 +17,15 @@ function matches(p: Place, q: string) {
   ].some((v) => v?.toLowerCase().includes(q))
 }
 
-export function DataTable({ places, onRefresh }: { places: Place[]; onRefresh: () => void }) {
+export function DataTable({
+  places,
+  onRefresh,
+  deliveryCountry,
+}: {
+  places: Place[]
+  onRefresh: () => void
+  deliveryCountry: DeliveryCountry
+}) {
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
 
@@ -77,7 +85,7 @@ export function DataTable({ places, onRefresh }: { places: Place[]; onRefresh: (
                 </td>
               </tr>
             ) : (
-              visible.map((p) => <Row key={p.id} place={p} onRefresh={onRefresh} />)
+              visible.map((p) => <Row key={p.id} place={p} onRefresh={onRefresh} deliveryCountry={deliveryCountry} />)
             )}
           </tbody>
         </table>
@@ -92,7 +100,15 @@ export function DataTable({ places, onRefresh }: { places: Place[]; onRefresh: (
   )
 }
 
-function Row({ place: p, onRefresh }: { place: Place; onRefresh: () => void }) {
+function Row({
+  place: p,
+  onRefresh,
+  deliveryCountry,
+}: {
+  place: Place
+  onRefresh: () => void
+  deliveryCountry: DeliveryCountry
+}) {
   const [expanded, setExpanded] = useState(false)
   const [deliveryPlatforms, setDeliveryPlatforms] = useState(p.delivery_platforms ?? [])
   const [discountPlatforms, setDiscountPlatforms] = useState(p.discount_platforms ?? [])
@@ -214,7 +230,7 @@ function Row({ place: p, onRefresh }: { place: Place; onRefresh: () => void }) {
             <div className="flex flex-col gap-4">
               <PlatformOptions
                 title="Delivery platforms"
-                platforms={DELIVERY_PLATFORMS}
+                platforms={DELIVERY_PLATFORMS_BY_COUNTRY[deliveryCountry]}
                 selected={deliveryPlatforms}
                 disabled={saving}
                 onChange={(platform, checked) => void updatePlatforms('delivery_platforms', platform, checked)}

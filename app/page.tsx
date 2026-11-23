@@ -5,14 +5,17 @@ import { ApiKeyStep } from '@/components/api-key-step'
 import { ApiSetupStep } from '@/components/api-setup-step'
 import { CollectionStep } from '@/components/collection-step'
 import { DataTable } from '@/components/data-table'
+import { DeliveryPlatforms } from '@/components/delivery-platforms'
 import { FailedQueue } from '@/components/failed-queue'
 import { useCollector } from '@/hooks/use-collector'
 import { usePlaces } from '@/hooks/use-places'
 import { API_KEY_STORAGE, config } from '@/lib/config'
-import { clearAllFailures } from '@/lib/db'
+import { clearAllFailures, upsertPlace } from '@/lib/db'
+import type { DeliveryCountry, Place } from '@/lib/types'
 
 export default function Page() {
   const [apiKey, setApiKey] = useState('')
+  const [deliveryCountry, setDeliveryCountry] = useState<DeliveryCountry>('QA')
   const { places, refresh } = usePlaces()
   const collector = useCollector(refresh)
 
@@ -29,6 +32,11 @@ export default function Page() {
     localStorage.removeItem(API_KEY_STORAGE)
     setApiKey('')
   }, [])
+
+  const importTalabatPlaces = useCallback(async (incoming: Place[]) => {
+    for (const place of incoming) await upsertPlace(place)
+    refresh()
+  }, [refresh])
 
   const clearQueue = useCallback(async () => {
     await clearAllFailures()
@@ -50,6 +58,11 @@ export default function Page() {
 
         <ApiSetupStep />
         <ApiKeyStep apiKey={apiKey} onSave={saveKey} onClear={clearKey} />
+        <DeliveryPlatforms
+          country={deliveryCountry}
+          onCountryChange={setDeliveryCountry}
+          onImportTalabat={importTalabatPlaces}
+        />
         <CollectionStep apiKey={apiKey} places={places} collector={collector} />
         <FailedQueue
           places={places}
@@ -57,7 +70,7 @@ export default function Page() {
           onClear={clearQueue}
           disabled={collector.running}
         />
-        <DataTable places={places} onRefresh={refresh} />
+        <DataTable places={places} onRefresh={refresh} deliveryCountry={deliveryCountry} />
 
         <footer className="border-t border-slate-800 pt-6 text-xs leading-relaxed text-slate-500">
           Data is retrieved from Google Maps Platform and stored only in this browser (IndexedDB).
