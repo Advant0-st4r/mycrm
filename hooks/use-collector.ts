@@ -61,6 +61,11 @@ export function useCollector(onDataChanged: () => void) {
     } catch { setAttempts([]) }
   }, [])
 
+  const clearAttempts = useCallback(() => {
+    try { localStorage.removeItem(ATTEMPTS_KEY) } catch { /* Storage may be unavailable. */ }
+    setAttempts([])
+  }, [])
+
   const log = useCallback((msg: string, level: LogLevel = 'info') => {
     const entry: LogEntry = { id: ++logId.current, ts: new Date().toLocaleTimeString(), level, msg }
     setLogs((prev) => {
@@ -148,5 +153,5 @@ export function useCollector(onDataChanged: () => void) {
     onDataChanged()
   }, [log, onDataChanged])
 
-  return { running, paused, progress, logs, sku, found, errors, attempts, loadAttempts, appendAttempt, requestStart, confirmStart, updateAndResume, togglePause, cancel, reset, log }
+  return { running, paused, progress, logs, sku, found, errors, attempts, loadAttempts, clearAttempts, appendAttempt, requestStart, confirmStart, updateAndResume, togglePause, cancel, reset, log }
 }

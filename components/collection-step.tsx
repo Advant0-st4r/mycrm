@@ -34,7 +34,7 @@ export function CollectionStep({ apiKey, places, collector }: CollectionStepProp
   const [reEnrich, setReEnrich] = useState(true)
   const [pendingMode, setPendingMode] = useState<'collect' | 'retry' | null>(null)
   const [attemptsOpen, setAttemptsOpen] = useState(false)
-  const { running, paused, progress, logs, sku, found, errors, attempts } = collector
+  const { running, paused, progress, logs, sku, found, errors, attempts, clearAttempts } = collector
   const editable = !running || paused
 
   useEffect(() => { collector.loadAttempts() }, [collector.loadAttempts])
@@ -66,6 +66,9 @@ export function CollectionStep({ apiKey, places, collector }: CollectionStepProp
   }
   const confirmReset = () => {
     if (window.confirm('Delete all saved places from this browser? This cannot be undone.')) void collector.reset()
+  }
+  const confirmClearAttempts = () => {
+    if (window.confirm('Delete saved attempt history and platform snapshots? Saved places will not be deleted. This cannot be undone.')) clearAttempts()
   }
   const download = (format: 'json' | 'csv') => {
     const csvCell = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
@@ -176,6 +179,7 @@ export function CollectionStep({ apiKey, places, collector }: CollectionStepProp
           <div className="flex flex-wrap gap-2">
             <ActionButton onClick={() => download('json')} disabled={!attempts.length}>Download JSON</ActionButton>
             <ActionButton onClick={() => download('csv')} disabled={!attempts.length}>Download CSV</ActionButton>
+            <ActionButton tone="danger" onClick={confirmClearAttempts} disabled={!attempts.length}>Clear saved attempts</ActionButton>
           </div>
           {attempts.length === 0 ? <p className="text-sm text-slate-400">Your saved runs will appear here.</p> : (
             <ol className="flex flex-col gap-2">
