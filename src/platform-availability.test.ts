@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePlatformResponse, readPlatformFlags } from '../lib/platform-availability'
+import { buildVerificationPrompt, parsePlatformResponse, readPlatformFlags } from '../lib/platform-availability'
 
 describe('platform response parsing', () => {
   it('extracts JSON from a fenced reply with surrounding explanation', () => {
@@ -18,13 +18,25 @@ describe('platform response parsing', () => {
     expect(parsePlatformResponse('{"name":"Cafe Four"}')).toHaveLength(1)
   })
 
+  it('builds an individual delivery listing search prompt for each restaurant', () => {
+    const prompt = buildVerificationPrompt([
+      { id: 'p1', name_en: 'Abo Shariha', name_ar: 'أبو شريحة' },
+      { id: 'p2', name_en: 'Cafe Two' },
+    ])
+    expect(prompt).toContain('Search each restaurant separately')
+    expect(prompt).toContain('"Abo Shariha"')
+    expect(prompt).toContain('site:talabat.com OR site:snoonu.com OR site:keeta.com OR site:rafeeq.com OR site:ninja.sa')
+    expect(prompt).toContain('"Cafe Two"')
+    expect(prompt).toContain('"ninja":false')
+  })
+
   it('normalizes common platform names and fills omitted platforms as unconfirmed', () => {
     const flags = readPlatformFlags({
-      deliveryPlatforms: { Talabat: 'available', Keeta: 'no' },
+      deliveryPlatforms: { Talabat: 'available', Keeta: 'no', Ninja: 'yes' },
       discounts: { 'Urban Point': 'yes' },
     })
     expect(flags).toMatchObject({
-      deliveryPlatforms: { talabat: true, snoonu: false, rafeek: false, keeta: false },
+      deliveryPlatforms: { talabat: true, snoonu: false, rafeek: false, keeta: false, ninja: true },
       discountPlatforms: { urban_point: true, mybook: false, entertainer: false },
       missingCount: 4,
     })
