@@ -18,6 +18,7 @@ export interface SavedAttempt {
   errors: number
   areas: number
   platformRows?: PlatformResultSnapshot[]
+  collectionId?: string
 }
 
 export function useCollector(onDataChanged: () => void) {
@@ -29,6 +30,7 @@ export function useCollector(onDataChanged: () => void) {
   const [found, setFound] = useState(0)
   const [errors, setErrors] = useState(0)
   const [attempts, setAttempts] = useState<SavedAttempt[]>([])
+  const [currentCollectionId, setCurrentCollectionId] = useState<string | null>(null)
   const pausedRef = useRef(false)
   const canceledRef = useRef(false)
   const logId = useRef(0)
@@ -47,6 +49,7 @@ export function useCollector(onDataChanged: () => void) {
         found: foundRef.current,
         errors: errorsRef.current,
         areas: areaCount,
+        ...(activeOptionsRef.current?.collectionId ? { collectionId: activeOptionsRef.current.collectionId } : {}),
         ...(platformRows ? { platformRows } : {}),
       }]
       try { localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(nextAttempt)) } catch { /* Storage may be unavailable. */ }
@@ -57,8 +60,12 @@ export function useCollector(onDataChanged: () => void) {
   const loadAttempts = useCallback(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(ATTEMPTS_KEY) || '[]')
-      if (Array.isArray(saved)) setAttempts(saved)
-    } catch { setAttempts([]) }
+      if (Array.isArray(saved)) {
+        setAttempts(saved)
+        const latestCollection = [...saved].reverse().find((attempt) => typeof attempt?.collectionId === 'string')
+        setCurrentCollectionId(latestCollection?.collectionId ?? null)
+      }
+    } catch { setAttempts([]); setCurrentCollectionId(null) }
   }, [])
 
   const clearAttempts = useCallback(() => {
@@ -116,10 +123,12 @@ export function useCollector(onDataChanged: () => void) {
   }, [appendAttempt])
 
   const confirmStart = useCallback((opts: RunOptions, mode: 'collect' | 'retry' = 'collect') => {
-    activeOptionsRef.current = opts
+    const runOptions = mode === 'collect' ? { ...opts, collectionId: crypto.randomUUID() } : opts
+    activeOptionsRef.current = runOptions
+    if (runOptions.collectionId) setCurrentCollectionId(runOptions.collectionId)
     setFound(0)
     setErrors(0)
-    void execute((cb) => mode === 'retry' ? runRetry(opts, cb) : runCollection(opts, cb))
+    void execute((cb) => mode === 'retry' ? runRetry(runOptions, cb) : runCollection(runOptions, cb))
   }, [execute])
 
   const updateAndResume = useCallback((opts: RunOptions) => {
@@ -153,5 +162,5 @@ export function useCollector(onDataChanged: () => void) {
     onDataChanged()
   }, [log, onDataChanged])
 
-  return { running, paused, progress, logs, sku, found, errors, attempts, loadAttempts, clearAttempts, appendAttempt, requestStart, confirmStart, updateAndResume, togglePause, cancel, reset, log }
+  return { running, paused, progress, logs, sku, found, errors, attempts, currentCollectionId, loadAttempts, clearAttempts, appendAttempt, requestStart, confirmStart, updateAndResume, togglePause, cancel, reset, log }
 }

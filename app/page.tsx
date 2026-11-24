@@ -84,6 +84,7 @@ export default function Page() {
           onRefresh={refresh}
           deliveryCountry={deliveryCountry}
           onPlatformsApplied={(rows) => collector.appendAttempt('Updated', rows.length, rows)}
+          currentCollectionId={collector.currentCollectionId}
         />
 
         <footer className="border-t border-slate-800 pt-6 text-xs leading-relaxed text-slate-500">

@@ -1,6 +1,6 @@
 import type { Place } from './types'
 
-export const DELIVERY_KEYS = ['talabat', 'snoonu', 'rafeek', 'keeta'] as const
+export const DELIVERY_KEYS = ['talabat', 'snoonu', 'rafeek', 'keeta', 'ninja'] as const
 export const DISCOUNT_KEYS = ['urban_point', 'mybook', 'entertainer'] as const
 export type DeliveryKey = (typeof DELIVERY_KEYS)[number]
 export type DiscountKey = (typeof DISCOUNT_KEYS)[number]
@@ -28,7 +28,7 @@ export function buildVerificationPrompt(places: VerificationRow[], rowIndices?: 
     areaOrBranch: place.addr_area ?? place._geo_area ?? place.addr_zone ?? '',
   }))
 
-  return `Verify Qatar platform availability for every restaurant in the input list below using live web search. Check English and Arabic names plus branch or area context.\n\nPlatforms to verify for EVERY row:\n- Delivery: talabat, snoonu, rafeek (Rafeeq), keeta\n- Discounts: urban_point (Urban Point), mybook (MyBook Qatar), entertainer (The ENTERTAINER Qatar)\n\nRules:\n1. Return ONLY valid JSON matching the schema below: no markdown fences, commentary, or extra text.\n2. Include every input row in the same order and keep its rowIndex exactly as provided. Never omit a row.\n3. Set a platform to true only when confirmed active in Qatar for that restaurant or branch; otherwise set it to false.\n4. Every boolean must be explicitly true or false.\n5. Copy restaurantName exactly from the input row.\n\nRequired output schema:\n[{"rowIndex":0,"restaurantName":"Restaurant name","deliveryPlatforms":{"talabat":false,"snoonu":false,"rafeek":false,"keeta":false},"discountPlatforms":{"urban_point":false,"mybook":false,"entertainer":false}}]\n\nInput restaurant list:\n${JSON.stringify(input, null, 2)}`
+  return `Do a simple live Google/Gemini web search for EACH restaurant below to check delivery-app listings. Search each restaurant separately by its English and Arabic name, adding its branch or area when available. Use a query like: "Abo Shariha" (site:talabat.com OR site:snoonu.com OR site:keeta.com OR site:rafeeq.com OR site:ninja.sa). Treat Ninja as applicable only for Saudi Arabia.\n\nCheck these delivery platforms: talabat, snoonu, rafeek (Rafeeq), keeta, and ninja (Saudi Arabia only). Also check discounts: urban_point (Urban Point), mybook (MyBook Qatar), and entertainer (The ENTERTAINER Qatar).\n\nRules:\n1. Search every input restaurant individually; do not infer from another branch or a similar restaurant name.\n2. Mark a platform true only when a matching active listing is found; otherwise mark it false.\n3. Return ONLY valid JSON matching the schema below: no markdown fences, commentary, or extra text.\n4. Include every input row in the same order and keep its rowIndex exactly as provided. Never omit a row.\n5. Every boolean must be explicitly true or false. Copy restaurantName exactly from the input row.\n\nRequired output schema:\n[{"rowIndex":0,"restaurantName":"Restaurant name","deliveryPlatforms":{"talabat":false,"snoonu":false,"rafeek":false,"keeta":false,"ninja":false},"discountPlatforms":{"urban_point":false,"mybook":false,"entertainer":false}}]\n\nInput restaurant list:\n${JSON.stringify(input, null, 2)}`
 }
 
 export function stripJsonFences(value: string) {
@@ -127,7 +127,7 @@ export function readPlatformFlags(value: unknown): (PlatformFlags & { missingCou
   const delivery = row.deliveryPlatforms ?? row.delivery_platforms ?? row.delivery ?? rootRecord?.deliveryPlatforms ?? rootRecord?.delivery ?? platformRoot
   const discounts = row.discountPlatforms ?? row.discount_platforms ?? row.discounts ?? row.offers ?? rootRecord?.discountPlatforms ?? rootRecord?.discounts ?? rootRecord?.offers ?? platformRoot
   const deliveryAliases: Record<DeliveryKey, string[]> = {
-    talabat: ['talabat'], snoonu: ['snoonu'], rafeek: ['rafeek', 'rafeeq'], keeta: ['keeta'],
+    talabat: ['talabat'], snoonu: ['snoonu'], rafeek: ['rafeek', 'rafeeq'], keeta: ['keeta'], ninja: ['ninja'],
   }
   const discountAliases: Record<DiscountKey, string[]> = {
     urban_point: ['urban_point', 'urban point', 'urbanpoint'], mybook: ['mybook'], entertainer: ['entertainer'],
@@ -146,7 +146,7 @@ export function readPlatformFlags(value: unknown): (PlatformFlags & { missingCou
 }
 
 export function selectedPlatformNames(flags: PlatformFlags) {
-  const deliveryNames: Record<DeliveryKey, string> = { talabat: 'Talabat', snoonu: 'Snoonu', rafeek: 'Rafeek', keeta: 'Keeta' }
+  const deliveryNames: Record<DeliveryKey, string> = { talabat: 'Talabat', snoonu: 'Snoonu', rafeek: 'Rafeek', keeta: 'Keeta', ninja: 'Ninja' }
   const discountNames: Record<DiscountKey, string> = { urban_point: 'Urban Point', mybook: 'MyBook', entertainer: 'Entertainer' }
   return {
     delivery: DELIVERY_KEYS.filter((key) => flags.deliveryPlatforms[key]).map((key) => deliveryNames[key]),

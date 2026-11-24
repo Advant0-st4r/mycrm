@@ -15,6 +15,7 @@ export interface RunOptions {
   photoUris: boolean
   geoEnrich: boolean
   reEnrich: boolean
+  collectionId?: string
 }
 
 export interface RunCallbacks {
@@ -34,6 +35,21 @@ const DETAILS_RATE_LIMIT_SLEEP_MS = 15_000
 const GEO_RATE_LIMIT_SLEEP_MS = 30_000
 const MAX_TRIES = 4
 const RETRY_BASE_MS = 15_000
+const LEGACY_COLLECTION_ID = '00000000-0000-4000-8000-000000000001'
+
+async function reserveIds(collectionId: string, placeIds: string[]) {
+  const response = await fetch('/api/leads/reserve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ collectionId, placeIds }),
+  })
+  if (!response.ok) throw new Error('Shared duplicate history is unavailable')
+  const result: unknown = await response.json()
+  if (!result || typeof result !== 'object' || !('acceptedIds' in result) || !Array.isArray(result.acceptedIds)) {
+    throw new Error('Shared duplicate history returned an invalid response')
+  }
+  return new Set(result.acceptedIds.filter((id): id is string => typeof id === 'string'))
+}
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -115,6 +131,14 @@ async function fetchPhotoUri(opts: RunOptions, cb: RunCallbacks, place: Place) {
 /* ---------- Phase 1: Text Search ---------- */
 async function phaseSearch(opts: RunOptions, cb: RunCallbacks) {
   const found = new Set<string>()
+  const existingPlaces = await getAllPlaces()
+  const existingIds = new Set(existingPlaces.map((place) => place.id))
+  if (existingIds.size) {
+    const ids = [...existingIds]
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      await reserveIds(LEGACY_COLLECTION_ID, ids.slice(offset, offset + 100))
+    }
+  }
   const groups: FieldGroup[] = opts.photosMeta
     ? FIELD_GROUPS
     : FIELD_GROUPS.filter((group) => group !== 'photos')
@@ -138,9 +162,16 @@ async function phaseSearch(opts: RunOptions, cb: RunCallbacks) {
         )
         cb.sku('TEXT_SEARCH_PRO')
         page++
-        for (const raw of res.places) {
-          if (count >= opts.maxPerArea) break
-          await upsertPlace(normalizePlace(raw, 'en'), true)
+        const candidates = [...new Map(res.places.map((place) => [place.id, place])).values()]
+          .filter((place) => !existingIds.has(place.id))
+          .slice(0, Math.max(opts.maxPerArea - count, 0))
+        const acceptedIds = opts.collectionId
+          ? await reserveIds(opts.collectionId, candidates.map((place) => place.id))
+          : new Set<string>()
+
+        for (const raw of candidates) {
+          if (!acceptedIds.has(raw.id)) continue
+          await upsertPlace({ ...normalizePlace(raw, 'en'), _collection_id: opts.collectionId }, true)
           found.add(raw.id)
           count++
         }
@@ -168,7 +199,7 @@ async function phaseSearch(opts: RunOptions, cb: RunCallbacks) {
 async function phaseDetails(opts: RunOptions, cb: RunCallbacks) {
   const all = await getAllPlaces()
   const targets = all.filter(
-    (p) => !p._details_done || (opts.reEnrich && (p._mask_version ?? 0) < MASK_VERSION),
+    (p) => p._collection_id === opts.collectionId && (!p._details_done || (opts.reEnrich && (p._mask_version ?? 0) < MASK_VERSION)),
   )
   const langs: Lang[] = opts.langMode === 'both' ? ['en', 'ar'] : ['en']
   cb.log(`Phase 2: fetching details for ${targets.length} places (${langs.join('+')})`, 'info')
@@ -220,6 +251,7 @@ async function phaseGeocode(opts: RunOptions, cb: RunCallbacks) {
   const all = await getAllPlaces()
   const candidates = all.filter(
     (p) =>
+      p._collection_id === opts.collectionId &&
       typeof p.lat === 'number' &&
       typeof p.lng === 'number' &&
       !p._geo_building &&

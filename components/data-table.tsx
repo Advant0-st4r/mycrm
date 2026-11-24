@@ -1,6 +1,7 @@
 'use client'
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import useSWR from 'swr'
 import { createPortal } from 'react-dom'
 import { ActionButton, inputClass } from './action-button'
 import { StepCard } from './step-card'
@@ -31,13 +32,29 @@ export function DataTable({
   onRefresh,
   deliveryCountry,
   onPlatformsApplied,
+  currentCollectionId,
 }: {
   places: Place[]
   onRefresh: () => void
   deliveryCountry: DeliveryCountry
   onPlatformsApplied: (rows: PlatformResultSnapshot[]) => void
+  currentCollectionId: string | null
 }) {
   const [query, setQuery] = useState('')
+  const [selectedCollectionId, setSelectedCollectionId] = useState(currentCollectionId ?? 'all')
+  const { data: collectionData } = useSWR<{ collections: Array<{ collectionId: string; createdAt: string; restaurantCount: number }> }>(
+    '/api/leads/collections',
+    async (url: string) => {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error('Could not load saved collections')
+      return response.json()
+    },
+    { revalidateOnFocus: false },
+  )
+
+  useEffect(() => {
+    if (currentCollectionId) setSelectedCollectionId(currentCollectionId)
+  }, [currentCollectionId])
   const [aiResponse, setAiResponse] = useState('')
   const [availabilityMessage, setAvailabilityMessage] = useState('')
   const [missingRows, setMissingRows] = useState<Place[]>([])
@@ -45,10 +62,13 @@ export function DataTable({
   const deferredQuery = useDeferredValue(query)
 
   const filtered = useMemo(() => {
+    const selectedPlaces = selectedCollectionId === 'all'
+      ? places
+      : places.filter((place) => place._collection_id === selectedCollectionId)
     const search = deferredQuery.trim().toLowerCase()
-    const list = search ? places.filter((place) => matches(place, search)) : places
+    const list = search ? selectedPlaces.filter((place) => matches(place, search)) : selectedPlaces
     return [...list].sort((a, b) => (a.name_en ?? '').localeCompare(b.name_en ?? ''))
-  }, [places, deferredQuery])
+  }, [places, deferredQuery, selectedCollectionId])
 
   const visible = filtered.slice(0, MAX_ROWS)
   const missingIds = useMemo(() => new Set(missingRows.map((place) => place.id)), [missingRows])
@@ -165,6 +185,23 @@ export function DataTable({
 
   return (
     <StepCard step={4} title="Review & export">
+      <div className="flex flex-col gap-2 rounded-xl border border-slate-700/70 bg-slate-900/60 p-4 sm:flex-row sm:items-center">
+        <label htmlFor="saved-collection" className="text-sm font-medium text-slate-300">Lead list</label>
+        <select
+          id="saved-collection"
+          value={selectedCollectionId}
+          onChange={(event) => setSelectedCollectionId(event.target.value)}
+          className={`${inputClass} sm:max-w-md`}
+        >
+          <option value="all">All locally saved restaurants</option>
+          {(collectionData?.collections ?? []).map((collection) => (
+            <option key={collection.collectionId} value={collection.collectionId}>
+              {new Date(collection.createdAt).toLocaleString()} · {collection.restaurantCount} shared IDs
+            </option>
+          ))}
+        </select>
+        <p className="text-xs leading-relaxed text-slate-400">Each run creates a fresh list. Shared history stores Google Place IDs to block repeats; restaurant details remain in the browser that collected them.</p>
+      </div>
       <div className="flex flex-col gap-2 md:flex-row">
         <label htmlFor="table-search" className="sr-only">Search places</label>
         <input
@@ -219,7 +256,7 @@ export function DataTable({
           </thead>
           <tbody className="divide-y divide-slate-800">
             {visible.length === 0 ? (
-              <tr><td colSpan={11} className="px-3 py-8 text-center text-slate-500">{places.length === 0 ? 'No places yet. Run a collection in Step 3.' : 'No places match your search.'}</td></tr>
+              <tr><td colSpan={11} className="px-3 py-8 text-center text-slate-500">{selectedCollectionId !== 'all' && places.length > 0 ? 'This shared list was collected in another browser. Restaurant details stay in the collecting browser; this shared history stores IDs only to prevent repeats.' : places.length === 0 ? 'No places yet. Run a collection in Step 3.' : 'No places match your search.'}</td></tr>
             ) : visible.map((place) => (
               <Row key={place.id} place={place} onRefresh={onRefresh} deliveryCountry={deliveryCountry} needsPlatformInfo={missingIds.has(place.id)} />
             ))}
