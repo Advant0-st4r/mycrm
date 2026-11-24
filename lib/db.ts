@@ -35,7 +35,7 @@ export function mergePlace(
   const merged: Record<string, unknown> = { ...base }
   for (const [key, value] of Object.entries(incoming)) {
     if (isEmpty(value)) continue
-    if (preferExisting && !isEmpty(merged[key])) continue
+    if (key !== '_collection_id' && preferExisting && !isEmpty(merged[key])) continue
     merged[key] = value
   }
   const place = merged as unknown as Place

@@ -88,6 +88,7 @@ export interface Place {
   language?: Lang
   _mask_version: number
   _details_done?: boolean
+  _collection_id?: string
   _completeness?: number
   _incomplete?: string[]
   _geo_building?: string
